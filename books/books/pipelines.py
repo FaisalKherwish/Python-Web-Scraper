@@ -7,6 +7,8 @@
 # useful for handling different item types with a single interface
 from itemadapter import ItemAdapter
 import pymongo
+import hashlib
+from scrapy.exceptions import DropItem
 
 
 class BooksPipeline:
@@ -31,5 +33,15 @@ class BooksPipeline:
         self.client.close()
 
     def process_item(self, item, spider):
-        self.db[self.COLLECTION_NAME].insert_one(ItemAdapter(item).asdict())
-        return item
+        item_id = self.compute_item_id(item)
+        
+        if self.db[self.COLLECTION_NAME].find_one({"_id": item_id}):
+            raise DropItem(f"Duplicate item found: {item}")
+        else:
+            item["_id"] = item_id
+            self.db[self.COLLECTION_NAME].insert_one(ItemAdapter(item).asdict())
+            return item
+
+    def compute_item_id(self, item):
+        url = item["url"]
+        return hashlib.sha256(url.encode("utf-8")).hexdigest()
